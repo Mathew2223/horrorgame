@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Тихий подвал — хоррор</title>
+    <script src="https://yandex.ru/games/sdk/v2"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #060504;
+        --ink: #d8cfae;
+        --blood: #a3241a;
+        --lamp: #e9c46a;
+        --dim: #7a7155;
+        color-scheme: dark;
+        box-sizing: border-box;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "IM Fell English", Georgia, serif;
+        overflow: hidden;
+        touch-action: none;
+        user-select: none;
+      }
+      #stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #hud {
+        position: absolute;
+        left: 14px;
+        top: 12px;
+        font-size: 19px;
+        text-shadow: 0 0 8px #000;
+        pointer-events: none;
+      }
+      #bar {
+        width: 140px;
+        height: 6px;
+        background: #2a2418;
+        margin-top: 6px;
+      }
+      #bar i {
+        display: block;
+        height: 100%;
+        width: 100%;
+        background: var(--lamp);
+      }
+      #msg {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 12%;
+        text-align: center;
+        font-style: italic;
+        font-size: 22px;
+        opacity: 0;
+        transition: opacity 0.6s;
+        pointer-events: none;
+        text-shadow: 0 0 10px #000;
+        padding: 0 16px;
+      }
+      #ov {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background: rgba(4, 3, 2, 0.92);
+        padding: 24px;
+        z-index: 20;
+      }
+      #ov h1 {
+        font-size: clamp(40px, 9vw, 84px);
+        margin: 0 0 6px;
+        font-weight: 400;
+        color: var(--blood);
+        letter-spacing: 0.02em;
+        text-shadow: 0 0 24px rgba(163, 36, 26, 0.5);
+      }
+      #ov p {
+        max-width: 34em;
+        line-height: 1.5;
+        font-size: 19px;
+        margin: 6px 0;
+        color: var(--ink);
+      }
+      #ov .s {
+        color: var(--dim);
+        font-size: 16px;
+      }
+      button {
+        font: inherit;
+        font-size: 22px;
+        color: var(--ink);
+        background: transparent;
+        border: 1px solid var(--blood);
+        padding: 12px 34px;
+        margin-top: 20px;
+        cursor: pointer;
+      }
+      button:hover,
+      button:focus-visible {
+        background: var(--blood);
+        outline: none;
+      }
+      #run {
+        display: none;
+        position: absolute;
+        right: 18px;
+        bottom: 22px;
+        width: 84px;
+        height: 84px;
+        border-radius: 50%;
+        padding: 0;
+        font-size: 17px;
+        background: rgba(0, 0, 0, 0.5);
+      }
+      #pauseBtn {
+        position: absolute;
+        right: 14px;
+        top: 12px;
+        width: 44px;
+        height: 44px;
+        font-size: 20px;
+        background: rgba(0, 0, 0, 0.6);
+        border: 1px solid var(--dim);
+        color: var(--ink);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        margin: 0;
+        z-index: 10;
+      }
+      #pauseBtn:hover {
+        background: var(--blood);
+        border-color: var(--blood);
+      }
+      @media (pointer: coarse) {
+        #run {
+          display: block;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="c"></canvas>
+      <div id="hud">
+        <div id="fz">Предохранители: 0 / 4</div>
+        <div id="bar"><i id="st"></i></div>
+      </div>
+      <div id="msg"></div>
+      <button id="run" aria-label="Бежать">Бег</button>
+      <button id="pauseBtn" aria-label="Пауза">❚❚</button>
+      <div id="ov"></div>
+    </div>
+    <script>
+      const i18n = {
+        ru: {
+          title: "Тихий подвал",
+          desc1:
+            "Свет отключили. Ты заперт в подвале старой больницы. Найди четыре предохранителя и открой восточную дверь.",
+          desc2: "Оно слышит, как ты бежишь. Оно видит свет. Оно не спит.",
+          desc3:
+            "WASD или стрелки — идти · Shift — бежать · мышь — направить фонарь<br>На телефоне: води пальцем по экрану, кнопка «Бег» справа",
+          best: "Лучший побег",
+          fuses: "Предохранители",
+          btnEnter: "Войти",
+          btnRetry: "Попробовать снова",
+          btnReturn: "Вернуться",
+          msgStart: "Найди предохранители. Не беги без нужды.",
+          msgOne: "Один есть. Шаги стали ближе.",
+          msgDoor: "Дверь на востоке открыта. Беги.",
+          winTitle: "Ты выбрался",
+          winDesc:
+            "Дверь захлопнулась за спиной. Из подвала — ни звука. Но ты знаешь: оно всё ещё там.",
+          winTime: "Время побега",
+          loseTitle: "Тебя нашли",
+          loseDesc:
+            "Фонарь погас. Последнее, что ты услышал — собственное дыхание.",
+          pausedTitle: "Пауза",
+          btnResume: "Продолжить",
+          btnToMenu: "В меню",
+        },
+        en: {
+          title: "Silent Basement",
+          desc1:
+            "The power is out. You are locked in the basement of an old hospital. Find four fuses and open the east door.",
+          desc2: "It hears you run. It sees the light. It does not sleep.",
+          desc3:
+            "WASD or arrows — move · Shift — run · mouse — aim flashlight<br>On mobile: drag finger, 'Run' button on the right",
+          best: "Best escape",
+          fuses: "Fuses",
+          btnEnter: "Enter",
+          btnRetry: "Try again",
+          btnReturn: "Return",
+          msgStart: "Find the fuses. Don't run unless necessary.",
+          msgOne: "Got one. The footsteps are getting closer.",
+          msgDoor: "The east door is open. Run.",
+          winTitle: "You escaped",
+          winDesc:
+            "The door slammed behind you. No sound from the basement. But you know: it's still there.",
+          winTime: "Escape time",
+          loseTitle: "You were found",
+          loseDesc:
+            "The flashlight went out. The last thing you heard was your own breathing.",
+          pausedTitle: "Paused",
+          btnResume: "Resume",
+          btnToMenu: "To Menu",
+        },
+      };
+
+      let currentLang = "ru";
+      let ysdk = null;
+
+      function t(key) {
+        return i18n[currentLang]?.[key] || i18n["ru"][key];
+      }
+
+      if (typeof YaGames !== "undefined") {
+        YaGames.init()
+          .then((ysdkInstance) => {
+            ysdk = ysdkInstance;
+            currentLang = ysdk.environment.i18n.lang;
+            if (!i18n[currentLang]) currentLang = "ru";
+            document.documentElement.lang = currentLang;
+            if (typeof S !== "undefined" && S === "menu") {
+              menu();
+            }
+          })
+          .catch((err) => {
+            console.warn("Yandex SDK init failed", err);
+          });
+      }
+
+      const cv = document.getElementById("c"),
+        g = cv.getContext("2d"),
+        dk = document.createElement("canvas"),
+        d = dk.getContext("2d");
+      const ov = document.getElementById("ov"),
+        msg = document.getElementById("msg"),
+        pauseBtn = document.getElementById("pauseBtn");
+      let W, H;
+      function rs() {
+        W = cv.width = dk.width = cv.clientWidth;
+        H = cv.height = dk.height = cv.clientHeight;
+      }
+      addEventListener("resize", rs);
+      rs();
+      const WW = 1400,
+        WH = 1000;
+      const WALLS = [
+        [0, 0, 1400, 30],
+        [0, 970, 1400, 30],
+        [0, 0, 30, 1000],
+        [1370, 0, 30, 1000],
+        [440, 30, 30, 350],
+        [440, 520, 30, 450],
+        [910, 30, 30, 250],
+        [910, 420, 30, 550],
+        [30, 480, 250, 30],
+        [650, 250, 60, 60],
+        [650, 650, 60, 60],
+        [200, 750, 100, 60],
+        [1100, 250, 60, 150],
+        [1100, 700, 150, 60],
+        [520, 480, 160, 30],
+      ];
+      const WP = [
+        [250, 250],
+        [250, 700],
+        [455, 450],
+        [690, 450],
+        [690, 150],
+        [690, 850],
+        [925, 350],
+        [1150, 500],
+        [1150, 150],
+        [1150, 850],
+        [250, 900],
+      ];
+      const FUSES0 = [
+        [220, 110],
+        [1250, 130],
+        [1220, 880],
+        [700, 880],
+      ];
+      const STAINS = [
+        [300, 300, 40],
+        [800, 600, 55],
+        [1200, 500, 35],
+        [120, 640, 30],
+        [760, 200, 45],
+        [560, 900, 38],
+      ];
+      const DOOR = [1355, 500];
+      let S = "menu",
+        P,
+        M,
+        fuses,
+        got,
+        t0,
+        best = 0,
+        scareT = 0,
+        K = {},
+        J = null,
+        mouse = null,
+        runBtn = false,
+        hbT = 0,
+        flick = 1;
+      try {
+        best = +localStorage.getItem("podvalBest") || 0;
+      } catch (e) {}
+
+      const col = (x, y, r) => {
+        for (const w of WALLS) {
+          const cx = Math.max(w[0], Math.min(x, w[0] + w[2])),
+            cy = Math.max(w[1], Math.min(y, w[1] + w[3]));
+          if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) return true;
+        }
+        return false;
+      };
+
+      const los = (a, b) => {
+        const n = Math.ceil(Math.hypot(a.x - b.x, a.y - b.y) / 14);
+        for (let i = 1; i < n; i++) {
+          if (col(a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n, 2))
+            return false;
+        }
+        return true;
+      };
+
+      function mv(e, dx, dy, r) {
+        let ok = false;
+        if (!col(e.x + dx, e.y, r)) {
+          e.x += dx;
+          ok = true;
+        }
+        if (!col(e.x, e.y + dy, r)) {
+          e.y += dy;
+          ok = true;
+        }
+        return ok;
+      }
+
+      let AC, drone;
+      function audio() {
+        if (AC) return;
+        try {
+          AC = new (window.AudioContext || window.webkitAudioContext)();
+          const o = AC.createOscillator(),
+            f = AC.createBiquadFilter(),
+            gn = AC.createGain();
+          o.type = "sawtooth";
+          o.frequency.value = 42;
+          f.type = "lowpass";
+          f.frequency.value = 120;
+          gn.gain.value = 0.05;
+          o.connect(f);
+          f.connect(gn);
+          gn.connect(AC.destination);
+          o.start();
+          drone = gn;
+        } catch (e) {}
+      }
+
+      function tone(fr, dur, vol, type, slide) {
+        if (!AC) return;
+        const o = AC.createOscillator(),
+          gn = AC.createGain(),
+          n = AC.currentTime;
+        o.type = type || "sine";
+        o.frequency.setValueAtTime(fr, n);
+        if (slide) o.frequency.exponentialRampToValueAtTime(slide, n + dur);
+        gn.gain.setValueAtTime(vol, n);
+        gn.gain.exponentialRampToValueAtTime(0.001, n + dur);
+        o.connect(gn);
+        gn.connect(AC.destination);
+        o.start();
+        o.stop(n + dur);
+      }
+
+      function noise(dur, vol) {
+        if (!AC) return;
+        const b = AC.createBuffer(1, AC.sampleRate * dur, AC.sampleRate),
+          a = b.getChannelData(0);
+        for (let i = 0; i < a.length; i++)
+          a[i] = (Math.random() * 2 - 1) * (1 - i / a.length);
+        const s = AC.createBufferSource(),
+          gn = AC.createGain();
+        gn.gain.value = vol;
+        s.buffer = b;
+        s.connect(gn);
+        gn.connect(AC.destination);
+        s.start();
+      }
+
+      const thump = (v) => {
+        tone(58, 0.18, v, "sine", 38);
+        setTimeout(() => tone(52, 0.16, v * 0.7, "sine", 34), 160);
+      };
+
+      function show(html) {
+        ov.innerHTML = html;
+        ov.style.display = "flex";
+      }
+
+      function say(txt, ms) {
+        msg.textContent = txt;
+        msg.style.opacity = 1;
+        clearTimeout(say.h);
+        say.h = setTimeout(() => (msg.style.opacity = 0), ms || 3500);
+      }
+
+      function menu() {
+        pauseBtn.style.display = "none";
+        show(
+          `<h1>${t("title")}</h1><p>${t("desc1")}</p><p>${t("desc2")}</p><p class="s">${t("desc3")}</p>${best ? `<p class="s">${t("best")}: ${best} с</p>` : ""}<button id="go">${t("btnEnter")}</button>`,
+        );
+        document.getElementById("go").onclick = start;
+      }
+
+      function start() {
+        audio();
+        ov.style.display = "none";
+        pauseBtn.style.display = "flex";
+        P = { x: 80, y: 900, a: -1, st: 100 };
+        M = {
+          x: 1000,
+          y: 500,
+          mode: "patrol",
+          wx: 1150,
+          wy: 500,
+          lx: 0,
+          ly: 0,
+          lost: 0,
+          stuck: 0,
+          sp: 1,
+        };
+        fuses = FUSES0.map((f) => ({ x: f[0], y: f[1] }));
+        got = 0;
+        t0 = performance.now();
+        S = "play";
+        document.getElementById("fz").textContent = t("fuses") + ": 0 / 4";
+        say(t("msgStart"), 4500);
+      }
+
+      function die() {
+        S = "scare";
+        scareT = 55;
+        noise(0.9, 0.9);
+        tone(420, 0.7, 0.4, "sawtooth", 60);
+        tone(90, 0.9, 0.5, "square", 30);
+      }
+
+      function win() {
+        S = "win";
+        pauseBtn.style.display = "none";
+        const s = Math.round((performance.now() - t0) / 1000);
+        if (!best || s < best) {
+          best = s;
+          try {
+            localStorage.setItem("podvalBest", s);
+          } catch (e) {}
+        }
+        tone(330, 1.2, 0.25, "sine");
+        show(
+          `<h1 style="color:var(--lamp)">${t("winTitle")}</h1><p>${t("winDesc")}</p><p class="s">${t("winTime")}: ${s} с · ${t("best")}: ${best} с</p><button id="go">${t("btnReturn")}</button>`,
+        );
+        document.getElementById("go").onclick = start;
+      }
+
+      function lose() {
+        S = "dead";
+        pauseBtn.style.display = "none";
+        show(
+          `<h1>${t("loseTitle")}</h1><p>${t("loseDesc")}</p><button id="go">${t("btnRetry")}</button>`,
+        );
+        document.getElementById("go").onclick = start;
+      }
+
+      function togglePause() {
+        if (S === "play") {
+          S = "pause";
+          pauseBtn.style.display = "none";
+          show(
+            `<h1>${t("pausedTitle")}</h1><button id="resume">${t("btnResume")}</button><br><button id="tomenu" style="margin-top:12px">${t("btnToMenu")}</button>`,
+          );
+          document.getElementById("resume").onclick = () => {
+            S = "play";
+            ov.style.display = "none";
+            pauseBtn.style.display = "flex";
+          };
+          document.getElementById("tomenu").onclick = () => {
+            S = "menu";
+            ov.style.display = "none";
+            menu();
+          };
+        }
+      }
+
+      pauseBtn.addEventListener("click", togglePause);
+
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden && S === "play") {
+          togglePause();
+        }
+      });
+
+      addEventListener("keydown", (e) => {
+        if (e.key.toLowerCase() === "escape" && S === "play") {
+          togglePause();
+          return;
+        }
+        K[e.key.toLowerCase()] = 1;
+        if (e.key.startsWith("Arrow")) e.preventDefault();
+      });
+      addEventListener("keyup", (e) => (K[e.key.toLowerCase()] = 0));
+      cv.addEventListener("mousemove", (e) => {
+        const r = cv.getBoundingClientRect();
+        mouse = { x: e.clientX - r.left, y: e.clientY - r.top };
+      });
+      cv.addEventListener(
+        "touchstart",
+        (e) => {
+          mouse = null;
+          const t = e.changedTouches[0];
+          J = { ox: t.clientX, oy: t.clientY, x: 0, y: 0 };
+        },
+        { passive: true },
+      );
+      cv.addEventListener(
+        "touchmove",
+        (e) => {
+          if (!J) return;
+          const t = e.changedTouches[0];
+          J.x = t.clientX - J.ox;
+          J.y = t.clientY - J.oy;
+        },
+        { passive: true },
+      );
+      cv.addEventListener("touchend", () => (J = null));
+      const rb = document.getElementById("run");
+      ["touchstart", "mousedown"].forEach((n) =>
+        rb.addEventListener(n, (e) => {
+          e.preventDefault();
+          runBtn = true;
+        }),
+      );
+      ["touchend", "mouseup", "mouseleave"].forEach((n) =>
+        rb.addEventListener(n, () => (runBtn = false)),
+      );
+
+      function update() {
+        let dx = (K.d || K.arrowright ? 1 : 0) - (K.a || K.arrowleft ? 1 : 0),
+          dy = (K.s || K.arrowdown ? 1 : 0) - (K.w || K.arrowup ? 1 : 0);
+        if (J && Math.hypot(J.x, J.y) > 10) {
+          dx = J.x;
+          dy = J.y;
+        }
+        const l = Math.hypot(dx, dy),
+          moving = l > 0.1;
+        if (moving) {
+          dx /= l;
+          dy /= l;
+        }
+        const sprint = moving && (K.shift || runBtn) && P.st > 0;
+        const sp = sprint ? 3.1 : 1.9;
+        if (moving) mv(P, dx * sp, dy * sp, 10);
+        P.st = Math.max(0, Math.min(100, P.st + (sprint ? -0.6 : 0.28)));
+        document.getElementById("st").style.width = P.st + "%";
+        if (mouse)
+          P.a = Math.atan2(mouse.y - (P.y - cam.y), mouse.x - (P.x - cam.x));
+        else if (moving) P.a = Math.atan2(dy, dx);
+
+        const dist = Math.hypot(M.x - P.x, M.y - P.y),
+          see = los(P, M),
+          am = Math.atan2(M.y - P.y, M.x - P.x);
+        let df = Math.abs(((am - P.a + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        const lit = see && df < 0.5 && dist < 330;
+        const hear =
+          (see && dist < (sprint ? 430 : 250)) || dist < (sprint ? 260 : 90);
+
+        if (hear) {
+          M.mode = "chase";
+          M.lx = P.x;
+          M.ly = P.y;
+          M.lost = 0;
+        } else if (M.mode === "chase") {
+          M.lost++;
+          if (M.lost > 260) {
+            M.mode = "patrol";
+            pick();
+          }
+        }
+
+        let tx, ty, spd;
+        if (M.mode === "chase") {
+          tx = M.lx;
+          ty = M.ly;
+          spd = (2.3 + got * 0.12) * (lit ? 0.45 : 1);
+          if (Math.hypot(tx - M.x, ty - M.y) < 20) M.lost += 8;
+        } else {
+          tx = M.wx;
+          ty = M.wy;
+          spd = 1.0 + got * 0.08;
+          if (Math.hypot(tx - M.x, ty - M.y) < 30) pick();
+        }
+
+        const a = Math.atan2(ty - M.y, tx - M.x);
+        M.a = a;
+        if (
+          !mv(M, Math.cos(a) * spd, Math.sin(a) * spd, 12) ||
+          Math.abs(M.px - M.x) + Math.abs(M.py - M.y) < 0.1
+        ) {
+          if (++M.stuck > 25) {
+            pick();
+            M.stuck = 0;
+          }
+        } else M.stuck = 0;
+        M.px = M.x;
+        M.py = M.y;
+
+        if (dist < 24) {
+          die();
+          return;
+        }
+
+        hbT--;
+        if (hbT <= 0 && dist < 520) {
+          thump(Math.min(0.5, 0.12 + (520 - dist) / 900));
+          hbT = Math.max(24, dist / 5.5);
+        }
+        if (drone)
+          drone.gain.value = 0.04 + Math.max(0, (500 - dist) / 500) * 0.08;
+
+        for (let i = fuses.length - 1; i >= 0; i--) {
+          const f = fuses[i];
+          if (Math.hypot(f.x - P.x, f.y - P.y) < 24) {
+            fuses.splice(i, 1);
+            got++;
+            tone(880, 0.5, 0.2, "sine");
+            document.getElementById("fz").textContent =
+              t("fuses") + ": " + got + " / 4";
+            say(got < 4 ? t("msgOne") : t("msgDoor"), 4000);
+          }
+        }
+        if (got === 4 && Math.hypot(DOOR[0] - P.x, DOOR[1] - P.y) < 45) win();
+
+        flick =
+          Math.random() < 0.04
+            ? 0.5 + Math.random() * 0.4
+            : Math.min(1, flick + 0.08);
+      }
+
+      function pick() {
+        let w;
+        if (Math.random() < 0.4) {
+          w = WP.slice().sort(
+            (a, b) =>
+              Math.hypot(a[0] - P.x, a[1] - P.y) -
+              Math.hypot(b[0] - P.x, b[1] - P.y),
+          )[0];
+        } else {
+          w = WP[Math.floor(Math.random() * WP.length)];
+        }
+        M.wx = w[0];
+        M.wy = w[1];
+      }
+
+      const cam = { x: 0, y: 0 };
+      function draw() {
+        g.fillStyle = "#000";
+        g.fillRect(0, 0, W, H);
+        if (S === "scare") {
+          scareT--;
+          const sx = (Math.random() - 0.5) * 40,
+            sy = (Math.random() - 0.5) * 40;
+          g.save();
+          g.translate(W / 2 + sx, H / 2 + sy);
+          const r = Math.min(W, H) * 0.42;
+          g.fillStyle = "#d9d2c0";
+          g.beginPath();
+          g.ellipse(0, 0, r * 0.6, r * 0.85, 0, 0, 7);
+          g.fill();
+          g.fillStyle = "#000";
+          g.beginPath();
+          g.ellipse(-r * 0.25, -r * 0.2, r * 0.14, r * 0.24, 0, 0, 7);
+          g.ellipse(r * 0.25, -r * 0.2, r * 0.14, r * 0.24, 0, 0, 7);
+          g.fill();
+          g.beginPath();
+          g.ellipse(0, r * 0.4, r * 0.2, r * 0.38, 0, 0, 7);
+          g.fill();
+          g.restore();
+          if (scareT <= 0) lose();
+          return;
+        }
+        if (!P) return;
+        cam.x = Math.max(0, Math.min(WW - W, P.x - W / 2));
+        cam.y = Math.max(0, Math.min(WH - H, P.y - H / 2));
+        if (W > WW) cam.x = (WW - W) / 2;
+        if (H > WH) cam.y = (WH - H) / 2;
+
+        g.save();
+        g.translate(-cam.x, -cam.y);
+        g.fillStyle = "#17120e";
+        g.fillRect(0, 0, WW, WH);
+        g.strokeStyle = "#1f1913";
+        g.lineWidth = 1;
+        for (let x = 0; x < WW; x += 100) {
+          g.beginPath();
+          g.moveTo(x, 0);
+          g.lineTo(x, WH);
+          g.stroke();
+        }
+        for (let y = 0; y < WH; y += 100) {
+          g.beginPath();
+          g.moveTo(0, y);
+          g.lineTo(WW, y);
+          g.stroke();
+        }
+
+        g.fillStyle = "#3a0e0b";
+        for (const s of STAINS) {
+          g.beginPath();
+          g.arc(s[0], s[1], s[2], 0, 7);
+          g.fill();
+        }
+
+        g.fillStyle = "#4b4234";
+        g.strokeStyle = "#6b6048";
+        for (const w of WALLS) {
+          g.fillRect(w[0], w[1], w[2], w[3]);
+          g.strokeRect(w[0], w[1], w[2], w[3]);
+        }
+
+        g.fillStyle = got === 4 ? "#e9c46a" : "#7a1d15";
+        g.fillRect(DOOR[0] - 8, DOOR[1] - 40, 16, 80);
+        for (const f of fuses) {
+          g.fillStyle = "#e9c46a";
+          g.shadowColor = "#e9c46a";
+          g.shadowBlur = 14;
+          g.fillRect(f.x - 6, f.y - 9, 12, 18);
+          g.shadowBlur = 0;
+        }
+
+        g.save();
+        g.translate(M.x, M.y);
+        g.rotate(M.a);
+        g.fillStyle = "#2b2520";
+        g.beginPath();
+        g.ellipse(0, 0, 14, 22, 0, 0, 7);
+        g.fill();
+        g.fillStyle = "#bdb59f";
+        g.beginPath();
+        g.arc(8, 0, 8, 0, 7);
+        g.fill();
+        g.fillStyle = "#000";
+        g.fillRect(10, -4, 3, 2);
+        g.fillRect(10, 2, 3, 2);
+        g.strokeStyle = "#2b2520";
+        g.lineWidth = 4;
+        g.beginPath();
+        g.moveTo(0, -18);
+        g.lineTo(22, -26);
+        g.moveTo(0, 18);
+        g.lineTo(22, 26);
+        g.stroke();
+        g.restore();
+
+        g.fillStyle = "#cfc6a8";
+        g.beginPath();
+        g.arc(P.x, P.y, 9, 0, 7);
+        g.fill();
+        g.restore();
+
+        const px = P.x - cam.x,
+          py = P.y - cam.y;
+        d.globalCompositeOperation = "source-over";
+        d.clearRect(0, 0, W, H);
+        d.fillStyle = "rgba(0,0,0,.975)";
+        d.fillRect(0, 0, W, H);
+        d.globalCompositeOperation = "destination-out";
+        let gr = d.createRadialGradient(px, py, 0, px, py, 80 * flick);
+        gr.addColorStop(0, "rgba(0,0,0,.9)");
+        gr.addColorStop(1, "rgba(0,0,0,0)");
+        d.fillStyle = gr;
+        d.beginPath();
+        d.arc(px, py, 80, 0, 7);
+        d.fill();
+
+        const R = 360 * flick;
+        gr = d.createRadialGradient(px, py, 10, px, py, R);
+        gr.addColorStop(0, "rgba(0,0,0,1)");
+        gr.addColorStop(0.7, "rgba(0,0,0,.7)");
+        gr.addColorStop(1, "rgba(0,0,0,0)");
+        d.fillStyle = gr;
+        d.beginPath();
+        d.moveTo(px, py);
+        d.arc(px, py, R, P.a - 0.42, P.a + 0.42);
+        d.closePath();
+        d.fill();
+        g.drawImage(dk, 0, 0);
+
+        const dm = Math.hypot(M.x - P.x, M.y - P.y);
+        if (dm < 300 || M.mode === "chase") {
+          g.fillStyle = "#ff2a1a";
+          g.shadowColor = "#f00";
+          g.shadowBlur = 12;
+          const ex = M.x - cam.x,
+            ey = M.y - cam.y;
+          g.beginPath();
+          g.arc(
+            ex + Math.cos(M.a) * 8 - Math.sin(M.a) * 4,
+            ey + Math.sin(M.a) * 8 + Math.cos(M.a) * 4,
+            2.2,
+            0,
+            7,
+          );
+          g.arc(
+            ex + Math.cos(M.a) * 8 + Math.sin(M.a) * 4,
+            ey + Math.sin(M.a) * 8 - Math.cos(M.a) * 4,
+            2.2,
+            0,
+            7,
+          );
+          g.fill();
+          g.shadowBlur = 0;
+        }
+
+        const v = Math.max(0, (450 - dm) / 450);
+        if (v > 0) {
+          const vg = g.createRadialGradient(
+            W / 2,
+            H / 2,
+            H * 0.3,
+            W / 2,
+            H / 2,
+            H * 0.85,
+          );
+          vg.addColorStop(0, "rgba(120,0,0,0)");
+          vg.addColorStop(1, `rgba(120,0,0,${v * 0.55})`);
+          g.fillStyle = vg;
+          g.fillRect(0, 0, W, H);
+        }
+      }
+
+      function loop() {
+        if (S === "play") update();
+        draw();
+        requestAnimationFrame(loop);
+      }
+
+      menu();
+      loop();
+    </script>
+  </body>
+</html>
